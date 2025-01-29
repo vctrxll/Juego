@@ -1,0 +1,617 @@
+#BUENO
+import serial
+import pygame #Libreria para manejar gráficos, sonido y dibujar gráficos en la ventana
+import time #Libreria para controlar el tiempo del juego, medir tiempos de respuesta y sincronizar eventos.
+import pymunk # Librería para las colisiones de los objetos físicos
+import pymunk.pygame_util # Integración de pymunk con Pygame para visualización de los objetos físicos
+import json # Para cargar configuraciones desde un archivo JSON
+import mediapipe as mp  # Para el reconocimiento de gestos de manos y análisis de video
+import cv2  # OpenCV, utilizado para procesamiento de imágenes y video
+import random # Librería para realizar operaciones aleatorias(mezclar la demostracion de las piramides)
+from math import sqrt # Función matemática para calcular la raíz cuadrada (distancia entre puntos)
+# Inicialización de Pygame
+pygame.init()
+
+# Abrir el archivo de configuraciones y cargar los datos
+settings = open('configuraciones.json') # Se abre el archivo JSON que contiene las configuraciones
+data = json.load(settings) # Se cargan los datos del archivo JSON en el diccionario 'data'
+settings.close() # Se cierra el archivo después de leer los datos
+# Asignar valores de configuración desde el archivo JSON a variables
+objectreadfile = data['mask'] # Archivo de la máscara u objeto
+objectRadius = data['radius'] # Radio del objeto
+objectColor = (data['rgb'][0],data['rgb'][1],data['rgb'][2],0) # Color del objeto en formato RGBA
+makeoptimize = data["WINDOWS_opt"] # Optimización de ventanas, opción leída del JSON
+invertPic = data["Inver"] # Indicador para invertir imagen, leída del JSON
+gcap1 = (data['corner_1'][0],data['corner_1'][1]) # Coordenadas de la esquina superior izquierda
+gcap2 = (data['corner_2'][0],data['corner_2'][1]) # Coordenadas de la esquina inferior derecha
+relW = gcap2[0] - gcap1[0] # Ancho relativo entre las dos esquinas definidas
+relH = gcap2[1] - gcap1[1] # Altura relativa entre las dos esquinas definida
+# Variable para controlar la reproducción de GIF
+playGIF = False
+# Dimensiones de la pantalla de juego
+SCREEN_WIDTH = 1300 # Ancho de la pantalla
+SCREEN_HEIGHT = 850 # Alto de la pantalla
+
+# Diccionario que contiene rutas a los archivos de audio de las pirámides
+audios_piramides = {
+    "Chichén Itzá": r"Audios_Piramides/Chichén_Itzá.mp3",
+    "Palenque": r"Audios_Piramides/Palenque_Chiapas.mp3",
+    "Calakmul": r"Audios_Piramides/Calakmul_Campeche.mp3",
+    "Cholula": r"Audios_Piramides/Cholula_Puebla.mp3",
+    "Comalcalco": r"Audios_Piramides/Comalcalco_Tabasco.mp3",
+    "Mitla": r"Audios_Piramides/Mitla_Oaxaca.mp3",
+    "Monte Albán": r"Audios_Piramides/Monte_Albán_Oaxaca.mp3",
+    "El Tajín": r"Audios_Piramides/El_Tajín.mp3",
+    "Tamtoc": r"Audios_Piramides/Tamtoc_San_Luis_Potosí.mp3",
+    "Teotihuacan": r"Audios_Piramides/Teotihuacán_Estado_de_México.mp3",
+    "Tulum": r"Audios_Piramides/Tulum_Quintana_Roo.mp3",
+    "Xochicalco": r"Audios_Piramides/Xochicalco_Morelos.mp3"
+}
+
+# Diccionario que define las áreas objetivo para cada pirámide (rectángulos para colisiones)
+areas2 = {
+    # Define un rectángulo con (ancho, alto)
+    "Chichén Itzá": pygame.Rect(1000, 235, 160, 100),
+    "Palenque": pygame.Rect(750, 620, 110, 120),
+    "Calakmul": pygame.Rect(950, 380, 110, 130),
+    "Cholula": pygame.Rect(340, 470, 80, 80),
+    "Comalcalco": pygame.Rect(770, 500, 80, 80),
+    "Mitla": pygame.Rect(420, 610, 150, 150),
+    "Monte Albán": pygame.Rect(420, 610, 150, 150),
+    "El Tajín": pygame.Rect(460, 440, 80, 80),
+    "Tamtoc": pygame.Rect(100, 30, 150, 200),
+    "Teotihuacan": pygame.Rect(190, 420, 50, 50),
+    "Tulum": pygame.Rect(1100, 350, 100, 110),
+    "Xochicalco": pygame.Rect(255, 470, 60, 60)
+}
+
+# Función para mezclar el orden de las pirámides aleatoriamente
+def mezclar_piramides(areas2):
+    # Obtener una lista de las claves (nombres de pirámides) de las áreas
+    claves = list(areas2.keys())
+    # Mezclar la lista de claves aleatoriamente
+    random.shuffle(claves)
+    # Crear un nuevo diccionario con el nuevo orden de pirámides
+    nuevo_orden = {clave: areas2[clave] for clave in claves}
+    return nuevo_orden
+
+# Llamada a la función
+areas = mezclar_piramides(areas2)
+
+# Imprimir el nuevo diccionario para ver el resultado
+print(areas)
+
+# Nuevas variables globales para el estado del juego
+pyramid_released = False # Indica si la pirámide ha sido soltada
+release_time = None # Guarda el tiempo cuando la pirámide fue soltada
+waiting_for_result = False # Indica si se está esperando un resultado tras soltar la pirámide
+##################################3
+piramides_correctas = 0 # Contador de pirámides correctas
+total_piramides = len(areas) # Total de pirámides en el juego
+current_audio = None # Audio actual que está sonando para una pirámide
+
+
+
+# Inicializar sonidos usando pygame.mixer para efectos de sonido
+pygame.mixer.init()
+sonido_correcto = pygame.mixer.Sound("sonido/correcto.mp3")  # Sonido para acierto
+sonido_incorrecto = pygame.mixer.Sound("sonido/incorrecto.mp3")  # Sonido para error
+sonido_centrar = pygame.mixer.Sound("sonido/centrar.mp3")  # Sonido para error
+
+# Función para renderizar el texto con el tamaño de fuente y color especificado
+def render_text(text, font_size, color):
+    font = pygame.font.Font(None, font_size) # Se crea una fuente de Pygame
+    return font.render(text, True, color) # Renderiza el texto con antialiasing
+
+# Diccionario que almacena los textos renderizados para cada pirámide
+pyramid_texts = {
+    "Calakmul": render_text("Calakmul", 60, (0, 0, 0)),
+    "Chichén Itzá": render_text("Chichén Itzá", 60, (20, 0, 0)),
+    "Cholula": render_text("Cholula", 60, (0, 0, 0)),
+    "Comalcalco": render_text("Comalcalco", 60, (0, 0, 0)),
+    "Mitla": render_text("Mitla", 60, (0, 0, 0)),
+    "Monte Albán": render_text("Monte Albán", 60, (0, 0, 0)),
+    "Palenque": render_text("Palenque", 60, (0, 0, 0)),
+    "El Tajín": render_text("El Tajín", 60, (0, 0, 0)),
+    "Tamtoc": render_text("Tamtoc", 60, (0, 0, 0)),
+    "Teotihuacan": render_text("Teotihuacan", 60, (0, 0, 0)),
+    "Tulum": render_text("Tulum", 60, (0, 0, 0)),
+    "Xochicalco": render_text("Xochicalco", 60, (0, 0, 0)),
+}
+
+# Lista de nombres de pirámides para mantener el orden de juego
+pyramid_names = list(areas.keys())
+current_pyramid_index = 0 # Índice de la pirámide actual
+
+# Función para obtener la pirámide actual basándose en el índice
+def get_current_pyramid():
+    return pyramid_names[current_pyramid_index]
+
+# Función para avanzar a la siguiente pirámide en el juego
+def next_pyramid():
+    global current_pyramid_index
+    # Incrementar el índice de la pirámide actual
+    current_pyramid_index = (current_pyramid_index + 1) % len(pyramid_names)# Incrementa el índice
+    # Si el índice vuelve a ser 0, significa que el jugador ha completado todas las pirámides
+    if current_pyramid_index == 0: # Si todas las pirámides han sido completadas
+        pygame.mixer.music.pause() # Pausa la música
+        return False  # Retorna False para indicar que el juego ha terminado
+    else:
+        sonido_correcto.play() # Reproduce sonido de acierto
+        return True  # Continúa el juego con la siguiente pirámide
+
+# Función para reiniciar el juego después de una colisión correcta
+def reset_game():
+    global start_time, current_audio
+    moving_ball.body.position = (700, 100) # Restablece la posición de la pelota en movimiento
+    moving_ball.body.velocity = (0, 0) # Restablece la velocidad de la pelota
+    start_time = time.time() # Actualiza el tiempo de inicio
+
+    current_pyramid = get_current_pyramid() # Obtiene la pirámide actual
+    if current_pyramid in audios_piramides: # Si hay audio asociado a la pirámide
+        pygame.mixer.stop() # Detiene cualquier sonido actual
+        pygame.mixer.music.load(audios_piramides[current_pyramid]) # Carga el audio de la pirámide actual
+        pygame.mixer.music.play(-1) # Reproduce el audio en bucle
+        current_audio = current_pyramid # Actualiza el audio actual
+        sonido_correcto.play()  # Reproduce sonido de acierto
+        pygame.mixer.music.play(-1)
+
+# Función principal para manejar la colisión correcta
+def handle_correct_collision():
+    global game_over, piramides_correctas, current_pyramid_index
+    sonido_correcto.play() # Reproduce el sonido de acierto
+    piramides_correctas += 1 # Incrementa el contador de pirámides correctas
+
+    if piramides_correctas == total_piramides: # Si todas las pirámides han sido completadas
+        game_over = True # Termina el juego
+    else:
+        current_pyramid_index = (current_pyramid_index + 1) % len(pyramid_names)  # Avanza a la siguiente pirámide
+        reset_game() # Reinicia el juego para la nueva pirámide
+
+# Función para reiniciar el juego en colision incorrecta
+def reset_game_inc():
+    global piramides_correctas, start_time
+    # Restablece la posición de la pelota en movimiento a la posición inicial
+    moving_ball.body.position = (700, 100)
+    moving_ball.body.velocity = (0, 0)
+
+    piramides_correctas += 1  # Incrementa el contador de pirámides correctas.
+
+# Configurar la ventana de Pygame con el tamaño definido
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption("PIRAMIDES DE LA REPUBLICA MEXICANA") # Título de la ventana
+
+# Configurar la comunicación serial con Arduino
+try:
+    arduino = serial.Serial('COM3', 9600, timeout=1)
+    time.sleep(2)  # Dar tiempo a Arduino para inicializar
+    print("Conexión serial establecida con Arduino")
+except:
+    print("No se pudo establecer conexión con Arduino")
+    arduino = None
+
+
+
+# Cargar la imagen de fondo (un mapa con puntos) y ajustarla al tamaño de la pantalla
+background_image = pygame.image.load('fondo/3.jpg').convert() # Carga la imagen de fondo
+background_image = pygame.transform.scale(background_image, (SCREEN_WIDTH, SCREEN_HEIGHT)) # Escala la imagen al tamaño de la ventana
+
+# Inicializar el espacio de Pymunk para la simulación física
+space = pymunk.Space()  # Crear un espacio para la simulación física
+static_body = space.static_body # Cuerpo estático usado para objetos que no se mueven
+# Configurar las opciones de dibujo de Pymunk utilizando Pygame
+draw_options = pymunk.pygame_util.DrawOptions(screen)  # Opciones de dibujo para Pygame
+# Ajustar los colores de las opciones de dibujo para evitar que se dibujen las colisiones y restricciones
+draw_options.collision_point_color = (0,0,0,0)  # Desactiva el color de los puntos de colisión (transparente)
+draw_options.constraint_color = (0,0,0,0) # Desactiva el color de las restricciones (transparente)
+
+# Definir los bordes del área de simulación con líneas estáticas
+lines = [
+    [(0, 0), (0, SCREEN_HEIGHT)], # Línea desde la esquina superior izquierda hacia abajo
+    [(0, SCREEN_HEIGHT), (SCREEN_WIDTH, SCREEN_HEIGHT)], # Línea desde la parte inferior izquierda a la derecha
+    [(SCREEN_WIDTH, SCREEN_HEIGHT), (SCREEN_WIDTH, 0)], # Línea desde la parte inferior derecha hacia arriba
+    [(SCREEN_WIDTH, 0), (0, 0)] # Línea desde la esquina superior derecha hacia la izquierda
+]
+
+
+def create_line(p1, p2, wd):
+    # Crear un cuerpo estático para la simulación de física en pymunk
+    # Los cuerpos estáticos no se ven afectados por las fuerzas (gravedad, colisiones, etc.)
+    body = pymunk.Body(body_type=pymunk.Body.STATIC)
+
+    # Establecer la posición inicial del cuerpo estático (en este caso, en el origen (0, 0))
+    body.position = (0, 0)
+
+    # Crear una forma de segmento (línea) utilizando los puntos de inicio y fin (p1 y p2) y el ancho (wd)
+    shape = pymunk.Segment(body, p1, p2, wd)
+
+    # Establecer la elasticidad del segmento a 0.8 (rebote moderado en colisiones)
+    shape.elasticity = 0.8
+
+    # Añadir el cuerpo y la forma al espacio de simulación de pymunk
+    space.add(body, shape)
+
+
+def create_ball(radius, pos, rgba):
+    # Crear un cuerpo para la simulación de física en pymunk
+    body = pymunk.Body()
+
+    # Establecer la posición inicial del cuerpo
+    body.position = pos
+
+    # Crear una forma circular utilizando el cuerpo y el radio proporcionado
+    shape = pymunk.Circle(body, radius)
+
+    # Establecer la masa de la bola a 5 unidades
+    shape.mass = 5
+
+    # Establecer la elasticidad de la bola a 1 (choque completamente elástico)
+    shape.elasticity = 1
+
+    # Comentar la fricción de la bola (actualmente no se usa)
+    # shape.friction = 50
+
+    # Asignar un color RGBA a la bola para fines de visualización
+    shape.color = rgba
+
+    # Usar un pivote para añadir fricción al cuerpo
+    pivot = pymunk.PivotJoint(static_body, body, (0, 0), (0, 0))
+
+    # Deshabilitar la corrección de la articulación del pivote
+    pivot.max_bias = 0
+
+    # Emular la fricción lineal estableciendo una fuerza máxima en la articulación del pivote
+    pivot.max_force = 1000
+
+    # Añadir el cuerpo, la forma y el pivote al espacio de simulación de pymunk
+    space.add(body, shape, pivot)
+
+    # Devolver la forma creada para su uso posterior
+    return shape
+
+
+def create_hand_circle(position, radius=30, color=(255, 255, 255, 255)):
+    # Crear un cuerpo para la simulación de física en pymunk
+    body = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
+    body.position = position
+
+    # Crear una forma circular
+    shape = pymunk.Circle(body, radius)
+    shape.color = color  # Color del círculo (RGBA)
+
+    # Añadir el cuerpo y la forma al espacio de simulación de pymunk
+    space.add(body, shape)
+
+    return body, shape
+
+# Crear líneas físicas en el espacio
+for c in lines:
+    create_line(c[0],c[1],0.0)
+# Inicializar variables de las pirámides y la bola en movimiento
+handsShapes = [None, None]
+#en esta parte se cambia la pocision en la cual se desea que se inicialice la primera piramide
+moving_ball = create_ball(round(objectRadius*1.4),(900,100),objectColor)  # Inicializar la primera pirámide en una posición inicial
+frametick = 0
+frameCount = 0
+
+
+# Cargar la imagen de la pirámide con transparencia
+pic = pygame.image.load(objectreadfile).convert_alpha()
+pic = pygame.transform.scale(pic, (objectRadius*2, objectRadius*2))
+ballFrame = pic # Asignar la imagen de la pirámide a ballFrame
+
+
+
+#clock
+clock = pygame.time.Clock()
+FPS = 30
+#colours
+BG = (0, 0, 0)
+run = True
+
+makefullscreen = True
+
+print("Ejecutando...")
+
+
+mp_drawing = mp.solutions.drawing_utils
+mp_hands = mp.solutions.hands
+# Configuración de la captura de video (cámara)
+if makeoptimize:
+    cap = cv2.VideoCapture(0 + cv2.CAP_DSHOW) # Optimización para Windows
+else:
+    cap = cv2.VideoCapture(0) # Capturar video
+#hola
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1300) # Establecer ancho de video
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 850) # Establecer altura de video
+
+# Inicializar variables para el control de gestos
+counter = 0
+lastgestureX = 0
+lastgestureY = 0
+lastgestureZ = 0
+moveDelta = 30
+lastmoveX = 0
+lastmoveY = 0
+lastmoveZ = 0
+waitframe = True
+moveX = 0
+moveY = 0
+moveZ = 0
+newZ = True
+refZ = 0
+absZ = 0
+initialpose = True
+zoomcounter = 0
+
+# Función para calcular la distancia entre dos puntos
+def calc_distance(p1, p2):
+    return sqrt((p1[0]-p2[0])**2+(p1[1]-p2[1])**2)
+
+# Inicializar el temporizador
+start_time = time.time()
+time_limit = 200  # 100 segundos para cada pirámide
+game_over = False
+
+# Iniciar el módulo de detección de manos de MediaPipe con confianza mínima de detección y seguimiento
+with mp_hands.Hands(min_detection_confidence=0.8, min_tracking_confidence=0.8, max_num_hands=1) as hands:
+    while cap.isOpened() and run and not game_over:
+        clock.tick(FPS) # Control de velocidad de fotogramas
+        space.step(10 / FPS) # Actualizar el espacio de física de Pymunk
+
+        # Capturar un fotograma de la cámara
+        ret, frame = cap.read()
+        image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+        frameWidth = image.shape[1]
+        frameHeight = image.shape[0]
+
+        if invertPic:
+            image = cv2.flip(image, 1) # Invertir imagen si es necesario
+
+        image.flags.writeable = False # Optimizar imagen
+        results = hands.process(image) # Procesar la imagen para detectar manos
+        image.flags.writeable = True # Volver a hacer la imagen escribible
+        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR) # Convertir imagen de nuevo a BGR
+        #se cambia el color del marco de la area de interaccion
+        cv2.rectangle(image, gcap1, gcap2, (255, 255, 0), 1) 
+        totalHands = 0
+
+        # Inicializar variables para el control de la pirámide
+        pyramid_held = False
+        pyramid_released = False
+
+        if results.multi_hand_landmarks:
+            for hand_landmarks in results.multi_hand_landmarks:
+                # Obtener las posiciones de los dedos relevantes
+                thumb_tip = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP]
+                index_tip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
+                middle_tip = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_TIP]
+
+                # Convertir las coordenadas normalizadas a píxeles
+                thumb_pixel = mp_drawing._normalized_to_pixel_coordinates(thumb_tip.x, thumb_tip.y, frameWidth, frameHeight)
+                index_pixel = mp_drawing._normalized_to_pixel_coordinates(index_tip.x, index_tip.y, frameWidth, frameHeight)
+                middle_pixel = mp_drawing._normalized_to_pixel_coordinates(middle_tip.x, middle_tip.y, frameWidth, frameHeight)
+
+                if thumb_pixel and index_pixel and middle_pixel:
+                    # Calcular la distancia entre el pulgar e índice
+                    thumb_index_distance = calc_distance(thumb_pixel, index_pixel)
+
+                    # Si el pulgar y el índice están cerca, mover la pirámide
+                    if thumb_index_distance < 50:
+                        pyramid_held = True
+                        moving_ball.body.position = index_pixel  # Mover la pirámide a la posición del índice
+                        cv2.circle(image, thumb_pixel, 10, (0, 255, 0), -1) # Dibujar círculo verde en el pulgar
+                        cv2.circle(image, index_pixel, 10, (0, 255, 0), -1) # Dibujar círculo verde en el índice
+                    else:
+                        cv2.circle(image, thumb_pixel, 10, (255, 0, 0), -1) # Círculo rojo en el pulgar si no está cerca
+                        cv2.circle(image, index_pixel, 10, (255, 0, 0), -1) # Círculo rojo en el índice si no está cerca
+
+        # Mostrar la ventana de video si no está en pantalla completa
+        if not makefullscreen:
+            cv2.imshow('Hand Tracking', image)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'): 
+            break  # Salir si se presiona 'q'
+
+        # Dibujar la pantalla de fondo y la pirámide
+        screen.blit(background_image, (0, 0))
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                run = False # Salir si se cierra la ventana
+
+        space.debug_draw(draw_options) # Dibujar objetos fisicos
+
+        if frameCount > 15:
+            frameCount = 0 # Reinicia el conteo de fotogramas cada 15 ciclos para optimizar rendimiento.
+
+       
+        # Dibujar la pirámide en su posición actual
+        pyramid_pos = (int(moving_ball.body.position[0] - objectRadius), 
+               int(moving_ball.body.position[1] - objectRadius))
+        # Calcula la posición donde se debe dibujar la pirámide restando su radio a la posición de la bola (centrado).
+        screen.blit(ballFrame, pyramid_pos) # Dibuja la pirámide en pantalla.
+
+        # Obtener la pirámide actual y su texto asociado
+        current_pyramid = get_current_pyramid() # Función que determina qué pirámide se está moviendo.
+        pyramid_text = pyramid_texts[current_pyramid] # Obtiene el texto correspondiente a la pirámide actual.
+
+        # Reproducir audio si la pirámide está en la posición correcta
+        if current_audio != current_pyramid:
+            pygame.mixer.music.stop() # Detiene cualquier audio previo.
+            pygame.mixer.music.load(audios_piramides[current_pyramid])  # Carga el nuevo audio asociado a la pirámide.
+            pygame.mixer.music.play(-1) # Reproduce el nuevo audio en bucle.
+            current_audio = current_pyramid # Actualiza la pirámide actual que está sonando.
+
+        # Dibujar el área correcta de la pirámide
+        for pyramid_name, pyramid_rect in areas.items(): # Recorre todas las áreas de pirámides.
+            if pyramid_rect.collidepoint(moving_ball.body.position):  # Verifica si la pirámide actual está en su área correcta.
+                pyramid_text = pyramid_texts[pyramid_name] # Actualiza el texto si la pirámide está en su lugar.
+                
+
+        text_x = moving_ball.body.position[0] - pyramid_text.get_width() // 2 # Calcula la posición del texto centrado sobre la pirámide.
+        text_y = moving_ball.body.position[1] + objectRadius + 5 # Dibuja el texto justo debajo de la pirámide.
+        
+
+                # Lógica para manejar la colisión solo cuando se suelta la pirámide
+        # Lógica para manejar la colisión después de esperar 5 segundos
+        if waiting_for_result and time.time() - release_time >= 3: # Verifica si han pasado 3 segundos desde que la pirámide fue soltada.
+            waiting_for_result = False
+            ball_rect = pygame.Rect(moving_ball.body.position[0], moving_ball.body.position[1], 1, 1) # Crea un rectángulo pequeño en la posición de la pirámide.
+            correct_area = areas[current_pyramid] # Obtiene el área correcta para la pirámide actual.
+
+            if correct_area.colliderect(ball_rect): # Verifica si el rectángulo de la pirámide está colisionando con el área correcta.
+                print(f"¡Colisión correcta con {current_pyramid}!")
+                sonido_correcto.play() # Reproduce el sonido de colisión correcta.
+                handle_correct_collision() # Maneja la colisión correcta, probablemente sumando puntos.
+            else:
+                collision_detected = False
+                for name, area in areas.items(): # Recorre todas las áreas para verificar si hubo colisión incorrecta.
+                    if area.colliderect(ball_rect):
+                        print(f"Colisión incorrecta. La pirámide correcta es {current_pyramid}")
+                        sonido_incorrecto.play() # Reproduce el sonido de colisión incorrecta.
+                        game_over = True # Termina el juego por colisión incorrecta.
+                        collision_detected = True
+                        break
+                if not collision_detected:
+                    print("No se detectó colisión con ninguna área.") # No hubo colisión con ninguna área.
+                    sonido_centrar.play()
+
+         # Reiniciar el estado si la pirámide se mueve durante la espera
+        if waiting_for_result and pyramid_held:# Si la pirámide es movida mientras se espera resultado.
+            waiting_for_result = False # Cancela la espera por resultado.
+            pyramid_released = False  # Reinicia el estado de liberación de la pirámide.
+        # Crear superficies transparentes para las áreas una vez
+        area_surfaces = {}
+        for name, area in areas.items():
+            surface = pygame.Surface((area.width, area.height), pygame.SRCALPHA)
+            surface.fill((0, 0, 0, 0))  # Completamente transparente
+            
+            pygame.draw.rect(surface, (0, 255, 0, 0), (0, 0, area.width, area.height), 2)  # Borde semi-transparente
+            area_surfaces[name] = surface
+        for name, area in areas.items():
+            color = (255, 255, 255, 0) if name == current_pyramid else (255, 255, 255, 0)
+            surface = area_surfaces[name].copy()
+            pygame.draw.rect(surface, color, (0, 0, area.width, area.height), 2)  # Actualizar el color del borde
+            screen.blit(surface, (area.x, area.y))
+
+
+        pyramid_text = pyramid_texts[current_pyramid]
+        text_x = SCREEN_WIDTH // 2 - pyramid_text.get_width() // 2
+        text_y = 50
+        screen.blit(pyramid_text, (text_x, text_y))
+
+        instruction_text = render_text(f"Lleva la pirámide al estado que creas correspondiente", 30, (255, 255, 255))
+        instruction_x = SCREEN_WIDTH // 2 - instruction_text.get_width() // 2
+        instruction_y = 10
+        screen.blit(instruction_text, (instruction_x, instruction_y))
+        #CAMBIO 1
+        counter_text = render_text(f"PIRÁMIDES CORRECTAS: {piramides_correctas}/{4}", 30, (255, 255, 255))
+        counter_x = SCREEN_WIDTH - counter_text.get_width() - 10
+        counter_y = 10
+        screen.blit(counter_text, (counter_x, counter_y))
+
+        elapsed_time = time.time() - start_time
+        remaining_time = max(0, time_limit - elapsed_time)
+        time_text = render_text(f"Tiempo: {int(remaining_time)}s", 30, (0, 0, 255))
+        time_x = 10
+        time_y = 10
+        screen.blit(time_text, (time_x, time_y))
+        #CAMBIO 2
+        if remaining_time <= 0 or piramides_correctas == 4:
+            pygame.mixer.music.pause()
+            game_over = True
+
+        if frametick > 0:
+            frametick = 0
+            frameCount += 1
+        frametick += 1
+
+        pygame.display.update()
+
+    if game_over:
+        #screen.fill(BG)
+        screen.blit(background_image, (0, 0))
+        #CAMBIO 3
+        if piramides_correctas == 4:
+            # Enviar dato a Arduino
+            if arduino is not None:
+                try:
+                    mensaje = "darobsequio"  # Mensaje que queremos enviar
+                    arduino.write(mensaje.encode()) # Envía el comando al Arduino
+                    print("Señal enviada a Arduino: darobsequio")
+                except:
+                    print("Error al enviar datos a Arduino")
+            game_over_text = render_text("¡FELICIDADES!", 60, (0, 255, 0))
+            text_x = SCREEN_WIDTH // 2 - game_over_text.get_width() // 2
+            text_y = SCREEN_HEIGHT // 2 - game_over_text.get_height() // 2
+            screen.blit(game_over_text, (text_x, text_y))
+
+            congrats_text = render_text("ACERTASTE TODAS LAS PIRÁMIDES", 40, (0, 0, 255))
+            congrats_x = SCREEN_WIDTH // 2 - congrats_text.get_width() // 2
+            congrats_y = text_y + game_over_text.get_height() + 20
+            screen.blit(congrats_text, (congrats_x, congrats_y))
+
+            gift_text = render_text("TOMA TU OBSEQUIO", 40, (255, 255, 0))
+            gift_x = SCREEN_WIDTH // 2 - gift_text.get_width() // 2
+            gift_y = congrats_y + congrats_text.get_height() + 40
+            screen.blit(gift_text, (gift_x, gift_y))
+
+            #print("1")
+        else:
+            # Definir el texto 'Game Over'
+            # Renderizar el texto "Game Over"
+            game_over_text = render_text("Game Over", 50, (255, 0, 0))  # Texto "Game Over" con tamaño 50 y color rojo
+            
+            # Centrar el texto "Game Over" en pantalla
+            text_x = SCREEN_WIDTH // 2 - game_over_text.get_width() // 2
+            text_y = SCREEN_HEIGHT // 2 - game_over_text.get_height() // 2
+            
+            # Mostrar el texto "Game Over" en pantalla
+            screen.blit(game_over_text, (text_x, text_y))
+            
+            # Ahora que game_over_text está definido, puedes calcular score_y
+            score_y = text_y + game_over_text.get_height() + 5
+            #CAMBIO 4
+            # Mostrar el texto del puntaje final
+            final_score_text = render_text(f"Pirámides: {piramides_correctas}/{4}", 30, (255, 255, 255))
+            score_x = SCREEN_WIDTH // 2 - final_score_text.get_width() // 2
+            screen.blit(final_score_text, (score_x, score_y))
+            
+            # Mostrar instrucciones para salir
+            instruction_text = render_text("REGRESANDO AL MENU PRINCIPAL", 30, (218, 0, 167))
+            instruction_x = SCREEN_WIDTH // 2 - instruction_text.get_width() // 2
+            instruction_y = score_y + final_score_text.get_height() + 10
+            screen.blit(instruction_text, (instruction_x, instruction_y))
+
+    pygame.display.update()
+# Variables para el temporizador
+start_time = time.time()
+timeout = 10  # 10 segundos
+
+# Variable para controlar el bucle del juego
+waiting_for_enter = True
+
+while waiting_for_enter:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            waiting_for_enter = False
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_RETURN:
+                waiting_for_enter = False
+    
+    # Comprobar el temporizador
+    current_time = time.time()
+    elapsed_time = current_time - start_time
+    if elapsed_time > timeout:
+        waiting_for_enter = False
+
+    pygame.mixer.music.stop()
+
+cap.release()
+cv2.destroyAllWindows()
+# Cerrar la conexión serial al finalizar
+if arduino is not None:
+    arduino.close()
+pygame.quit()

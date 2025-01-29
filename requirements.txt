@@ -1,0 +1,6 @@
+pyserial
+pygame
+pymunk
+mediapipe
+opencv-python
+pygetwindow
