@@ -3,7 +3,6 @@ import time
 import cv2
 import mediapipe as mp
 import os
-import pygetwindow as gw
 
 # Configura la conexión con el Arduino
 def conectar_arduino(puerto='COM3', baudrate=9600, timeout=1):
@@ -16,6 +15,7 @@ def conectar_arduino(puerto='COM3', baudrate=9600, timeout=1):
         print(f"Error al conectar con Arduino: {e}")
         return None
 arduino = conectar_arduino()
+initialstate = True
 
 #VENTANA OPENCV
 # Cargar imagen de fondo desde una ruta relativa
@@ -39,36 +39,47 @@ mp_hands = mp.solutions.hands
 
 with mp_hands.Hands(min_detection_confidence=0.8, min_tracking_confidence=0.8, max_num_hands=1) as hands:
     while cap.isOpened():
- 
-        ret, frame = cap.read()
-        if not ret:
-            print("Error al capturar el frame")
-            break
 
-        image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        image = cv2.flip(image, 1)  # Efecto espejo
-
-        image.flags.writeable = False
-        results = hands.process(image)
-        image.flags.writeable = True
-
-        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-
-        # Reemplazar el frame con la imagen de fondo
-        output = background.copy()
-
-        if results.multi_hand_landmarks:
-            for hand_landmarks in results.multi_hand_landmarks:
-                mp_drawing.draw_landmarks(output, hand_landmarks, mp_hands.HAND_CONNECTIONS)
-
-        # Optimización de la lectura del puerto serie
+        if initialstate:
+            if arduino.in_waiting > 0:  # Si hay datos disponibles en el puerto serie
+                resultado = arduino.readline().decode('utf-8').strip()  # Leer y decodificar el dato
+                if resultado == "COIN":
+                    print("Moneda insertada")
+                    coin = True  # Cambiar el estado de la moneda a True
+                else:
+                    print("Moneda no insertada")
+                    coin = False  # Cambiar el estado de la moneda a False
 
 
-        # Mostrar la imagen en la ventana de OpenCV
-        cv2.imshow("Menu", output)
+        if coin:
+            ret, frame = cap.read()
+            if not ret:
+                print("Error al capturar el frame")
+                break
 
-        if cv2.waitKey(1) & 0xFF == ord(" "):
-            break
+            image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            image = cv2.flip(image, 1)  # Efecto espejo
+
+            image.flags.writeable = False
+            results = hands.process(image)
+            image.flags.writeable = True
+
+            image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+
+            # Reemplazar el frame con la imagen de fondo
+            output = background.copy()
+
+            if results.multi_hand_landmarks:
+                for hand_landmarks in results.multi_hand_landmarks:
+                    mp_drawing.draw_landmarks(output, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+
+            # Optimización de la lectura del puerto serie
+
+            # Mostrar la imagen en la ventana de OpenCV
+            cv2.imshow("Menu", output)
+
+            if cv2.waitKey(1) & 0xFF == ord(" "):
+                break
 
 cap.release()
 cv2.destroyAllWindows()
