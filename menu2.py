@@ -18,8 +18,8 @@ import math
 # Inicializar Pygame
 pygame.init()
 # Dimensiones de la ventana de captura de video (webcam) en pixeles
-cap_width = 640
-cap_height = 360
+cap_width = 1300
+cap_height = 850
 
 # Dimensiones de la ventana de pygame en pixeles
 ANCHO = 1300
@@ -68,51 +68,6 @@ fondo_img = pygame.transform.scale(fondo_img, (ANCHO, ALTO)) # Redimensionarla a
 def mostrar_texto(texto, x, y, color):
     superficie = fuente.render(texto, True, color) # Renderizar el texto con la fuente y color especificados
     pantalla.blit(superficie, (x, y))  # Dibujar el texto en la pantalla
-
-# Función para mostrar texto centrado en el rectángulo
-def mostrar_texto_centrado(texto, rectangulo, color):
-    superficie = fuente.render(texto, True, color) # Renderizar el texto
-    text_rect = superficie.get_rect(center=rectangulo.center) # Obtener el rectángulo centrado
-    pantalla.blit(superficie, text_rect) # Dibujar el texto centrado en la pantalla
-
-
-def detect_finger_down(hand_landmarks):
-    print("-----------------------------")
-    finger_down = False
-    x_base1 = int(hand_landmarks.landmark[0].x * cap_width)
-    y_base1 = int(hand_landmarks.landmark[0].y * cap_height)
-
-    x_base2 = int(hand_landmarks.landmark[17].x * cap_width)
-    y_base2 = int(hand_landmarks.landmark[17].y * cap_height)
-
-    x_pinky = int(hand_landmarks.landmark[20].x * cap_width)
-    y_pinky = int(hand_landmarks.landmark[20].y * cap_height)
-
-    x_anular = int(hand_landmarks.landmark[16].x * cap_width)
-    y_anular = int(hand_landmarks.landmark[16].y * cap_height)
-
-    x_medio = int(hand_landmarks.landmark[12].x * cap_width)
-    y_medio = int(hand_landmarks.landmark[12].y * cap_height)
-
-    p1 = (x_base1, y_base1)
-    p5 = (x_base2, y_base2)
-    p2 = (x_pinky, y_pinky)
-    p3 = (x_anular, y_anular)
-    p4 = (x_medio, y_medio)
-    d_base_base = calc_distance(p1, p5)
-    d_base_pinky = calc_distance(p1, p2)
-    d_base_anular = calc_distance(p1, p3)
-    d_base_medio = calc_distance(p1, p4)
-    print(d_base_base)
-    print("------------------------------------")
-    print("Pinky ", d_base_pinky)
-    print("Anular ", d_base_anular)
-    print("Medio ", d_base_medio)
-    if d_base_anular < 20 and d_base_medio < 20 and d_base_pinky < 20:
-        finger_down = True
-    #print("---------------------")
-    return finger_down
-
 
 
 # Función para ejecutar el juego (dependiendo de la moneda)

@@ -127,19 +127,6 @@ current_pyramid_index = 0 # Índice de la pirámide actual
 def get_current_pyramid():
     return pyramid_names[current_pyramid_index]
 
-# Función para avanzar a la siguiente pirámide en el juego
-def next_pyramid():
-    global current_pyramid_index
-    # Incrementar el índice de la pirámide actual
-    current_pyramid_index = (current_pyramid_index + 1) % len(pyramid_names)# Incrementa el índice
-    # Si el índice vuelve a ser 0, significa que el jugador ha completado todas las pirámides
-    if current_pyramid_index == 0: # Si todas las pirámides han sido completadas
-        pygame.mixer.music.pause() # Pausa la música
-        return False  # Retorna False para indicar que el juego ha terminado
-    else:
-        sonido_correcto.play() # Reproduce sonido de acierto
-        return True  # Continúa el juego con la siguiente pirámide
-
 # Función para reiniciar el juego después de una colisión correcta
 def reset_game():
     global start_time, current_audio
@@ -168,15 +155,6 @@ def handle_correct_collision():
         current_pyramid_index = (current_pyramid_index + 1) % len(pyramid_names)  # Avanza a la siguiente pirámide
         reset_game() # Reinicia el juego para la nueva pirámide
 
-# Función para reiniciar el juego en colision incorrecta
-def reset_game_inc():
-    global piramides_correctas, start_time
-    # Restablece la posición de la pelota en movimiento a la posición inicial
-    moving_ball.body.position = (700, 100)
-    moving_ball.body.velocity = (0, 0)
-
-    piramides_correctas += 1  # Incrementa el contador de pirámides correctas.
-
 # Configurar la ventana de Pygame con el tamaño definido
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 pygame.display.set_caption("PIRAMIDES DE LA REPUBLICA MEXICANA") # Título de la ventana
@@ -189,8 +167,6 @@ try:
 except:
     print("No se pudo establecer conexión con Arduino")
     arduino = None
-
-
 
 # Cargar la imagen de fondo (un mapa con puntos) y ajustarla al tamaño de la pantalla
 background_image = pygame.image.load('fondo/3.jpg').convert() # Carga la imagen de fondo
@@ -270,23 +246,12 @@ def create_ball(radius, pos, rgba):
     return shape
 
 
-def create_hand_circle(position, radius=30, color=(255, 255, 255, 255)):
-    # Crear un cuerpo para la simulación de física en pymunk
-    body = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
-    body.position = position
-
-    # Crear una forma circular
-    shape = pymunk.Circle(body, radius)
-    shape.color = color  # Color del círculo (RGBA)
-
-    # Añadir el cuerpo y la forma al espacio de simulación de pymunk
-    space.add(body, shape)
-
-    return body, shape
-
 # Crear líneas físicas en el espacio
 for c in lines:
     create_line(c[0],c[1],0.0)
+
+
+
 # Inicializar variables de las pirámides y la bola en movimiento
 handsShapes = [None, None]
 #en esta parte se cambia la pocision en la cual se desea que se inicialice la primera piramide
@@ -321,28 +286,18 @@ if makeoptimize:
     cap = cv2.VideoCapture(0 + cv2.CAP_DSHOW) # Optimización para Windows
 else:
     cap = cv2.VideoCapture(0) # Capturar video
-#hola
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1300) # Establecer ancho de video
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 850) # Establecer altura de video
 
 # Inicializar variables para el control de gestos
 counter = 0
-lastgestureX = 0
-lastgestureY = 0
-lastgestureZ = 0
 moveDelta = 30
-lastmoveX = 0
-lastmoveY = 0
-lastmoveZ = 0
-waitframe = True
 moveX = 0
 moveY = 0
 moveZ = 0
 newZ = True
 refZ = 0
 absZ = 0
-initialpose = True
-zoomcounter = 0
 
 # Función para calcular la distancia entre dos puntos
 def calc_distance(p1, p2):
@@ -386,14 +341,14 @@ with mp_hands.Hands(min_detection_confidence=0.8, min_tracking_confidence=0.8, m
                 # Obtener las posiciones de los dedos relevantes
                 thumb_tip = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP]
                 index_tip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
-                middle_tip = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_TIP]
+
 
                 # Convertir las coordenadas normalizadas a píxeles
                 thumb_pixel = mp_drawing._normalized_to_pixel_coordinates(thumb_tip.x, thumb_tip.y, frameWidth, frameHeight)
                 index_pixel = mp_drawing._normalized_to_pixel_coordinates(index_tip.x, index_tip.y, frameWidth, frameHeight)
-                middle_pixel = mp_drawing._normalized_to_pixel_coordinates(middle_tip.x, middle_tip.y, frameWidth, frameHeight)
 
-                if thumb_pixel and index_pixel and middle_pixel:
+
+                if thumb_pixel and index_pixel:
                     # Calcular la distancia entre el pulgar e índice
                     thumb_index_distance = calc_distance(thumb_pixel, index_pixel)
 
@@ -408,18 +363,7 @@ with mp_hands.Hands(min_detection_confidence=0.8, min_tracking_confidence=0.8, m
                         cv2.circle(image, index_pixel, 10, (255, 0, 0), -1) # Círculo rojo en el índice si no está cerca
 
         # Mostrar la ventana de video si no está en pantalla completa
-        if not makefullscreen:
-            cv2.imshow('Hand Tracking', image)
 
-        if cv2.waitKey(1) & 0xFF == ord('q'): 
-            break  # Salir si se presiona 'q'
-
-        # Dibujar la pantalla de fondo y la pirámide
-        screen.blit(background_image, (0, 0))
-
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                run = False # Salir si se cierra la ventana
 
         space.debug_draw(draw_options) # Dibujar objetos fisicos
 
@@ -487,15 +431,13 @@ with mp_hands.Hands(min_detection_confidence=0.8, min_tracking_confidence=0.8, m
         for name, area in areas.items():
             surface = pygame.Surface((area.width, area.height), pygame.SRCALPHA)
             surface.fill((0, 0, 0, 0))  # Completamente transparente
-            
             pygame.draw.rect(surface, (0, 255, 0, 0), (0, 0, area.width, area.height), 2)  # Borde semi-transparente
             area_surfaces[name] = surface
-        for name, area in areas.items():
+
             color = (255, 255, 255, 0) if name == current_pyramid else (255, 255, 255, 0)
             surface = area_surfaces[name].copy()
             pygame.draw.rect(surface, color, (0, 0, area.width, area.height), 2)  # Actualizar el color del borde
             screen.blit(surface, (area.x, area.y))
-
 
         pyramid_text = pyramid_texts[current_pyramid]
         text_x = SCREEN_WIDTH // 2 - pyramid_text.get_width() // 2
@@ -528,10 +470,23 @@ with mp_hands.Hands(min_detection_confidence=0.8, min_tracking_confidence=0.8, m
             frameCount += 1
         frametick += 1
 
+        if not makefullscreen:
+            cv2.imshow('Hand Tracking', image)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break  # Salir si se presiona 'q'
+
+        # Dibujar la pantalla de fondo y la pirámide
+        screen.blit(background_image, (0, 0))
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                run = False # Salir si se cierra la ventana
+
+
         pygame.display.update()
 
     if game_over:
-        #screen.fill(BG)
         screen.blit(background_image, (0, 0))
         #CAMBIO 3
         if piramides_correctas == 4:
