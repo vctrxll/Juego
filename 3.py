@@ -80,15 +80,17 @@ def mezclar_piramides(areas2):
 
 # Llamada a la función
 areas = mezclar_piramides(areas2)
+pygame.mixer.music.load(audios_piramides[list(areas.keys())[0]])
+print(audios_piramides[list(areas.keys())[0]])
+pygame.mixer.music.play(0)  # Solo se reproduce una vez
 
-# Imprimir el nuevo diccionario para ver el resultado
-print(areas)
 
 # Nuevas variables globales para el estado del juego
-pyramid_released = False  # Indica si la pirámide ha sido soltada
+# Indica si la pirámide ha sido soltada
+pyramid_released = False
 release_time = None  # Guarda el tiempo cuando la pirámide fue soltada
 waiting_for_result = False  # Indica si se está esperando un resultado tras soltar la pirámide
-##################################3
+
 piramides_correctas = 0  # Contador de pirámides correctas
 total_piramides = len(areas)  # Total de pirámides en el juego
 current_audio = None  # Audio actual que está sonando para una pirámide
@@ -175,8 +177,7 @@ except:
 
 # Cargar la imagen de fondo (un mapa con puntos) y ajustarla al tamaño de la pantalla
 background_image = pygame.image.load('fondo/3.jpg').convert()  # Carga la imagen de fondo
-background_image = pygame.transform.scale(background_image,
-                                          (SCREEN_WIDTH, SCREEN_HEIGHT))  # Escala la imagen al tamaño de la ventana
+background_image = pygame.transform.scale(background_image, (SCREEN_WIDTH, SCREEN_HEIGHT))  # Escala la imagen al tamaño de la ventana
 
 # Inicializar el espacio de Pymunk para la simulación física
 space = pymunk.Space()  # Crear un espacio para la simulación física
@@ -272,7 +273,7 @@ clock = pygame.time.Clock()
 FPS = 30
 # colours
 BG = (0, 0, 0)
-run = True
+runGame = True
 
 makefullscreen = True
 
@@ -309,21 +310,22 @@ time_limit = 200  # 100 segundos para cada pirámide
 game_over = False
 
 # Iniciar el módulo de detección de manos de MediaPipe con confianza mínima de detección y seguimiento
-with mp_hands.Hands(min_detection_confidence=0.8, min_tracking_confidence=0.5) as hands:
-    while cap.isOpened() and run and not game_over:
+with mp_hands.Hands(min_detection_confidence=0.8, min_tracking_confidence=0.8) as hands:
+    while cap.isOpened() and runGame and not game_over:
+
+
+        prueba = True
         clock.tick(FPS)  # Control de velocidad de fotogramas
         space.step(10 / FPS)  # Actualizar el espacio de física de Pymunk
 
         # Capturar un fotograma de la cámara
+        #Para OPENCV
         ret, frame = cap.read()
         image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
         frameWidth = image.shape[1]
         frameHeight = image.shape[0]
-
         if invertPic:
             image = cv2.flip(image, 1)  # Invertir imagen si es necesario
-
         image.flags.writeable = False  # Optimizar imagen
         results = hands.process(image)  # Procesar la imagen para detectar manos
         image.flags.writeable = True  # Volver a hacer la imagen escribible
@@ -332,9 +334,25 @@ with mp_hands.Hands(min_detection_confidence=0.8, min_tracking_confidence=0.5) a
         cv2.rectangle(image, gcap1, gcap2, (255, 255, 0), 1)
         totalHands = 0
 
+        #DE VALIABLES PARA EL JUEGO
         # Inicializar variables para el control de la pirámide
         pyramid_held = False
         pyramid_released = False
+        #DIBJAR NECESIDADES DEL JUEGO
+        # Dibujar la pantalla de fondo y la pirámide
+        screen.blit(background_image, (0, 0))
+        space.debug_draw(draw_options)  # Dibujar objetos fisicos
+        # Dibujar la pirámide en su posición actual
+        pyramid_pos = (int(moving_ball.body.position[0] - objectRadius), int(moving_ball.body.position[1] - objectRadius))
+        # Calcula la posición donde se debe dibujar la pirámide restando su radio a la posición de la bola (centrado).
+        screen.blit(ballFrame, pyramid_pos)  # Dibuja la pirámide en pantalla.
+
+        # Obtener la pirámide actual y su texto asociado
+        current_pyramid = get_current_pyramid()  # Función que determina qué pirámide se está moviendo.
+        pyramid_text = pyramid_texts[current_pyramid]  # Obtiene el texto correspondiente a la pirámide actual.
+
+        text_x = moving_ball.body.position[0] - pyramid_text.get_width() // 2  # Calcula la posición del texto centrado sobre la pirámide.
+        text_y = moving_ball.body.position[1] + objectRadius + 5  # Dibuja el texto justo debajo de la pirámide.
 
         if results.multi_hand_landmarks:
             for hand_landmarks in results.multi_hand_landmarks:
@@ -359,66 +377,15 @@ with mp_hands.Hands(min_detection_confidence=0.8, min_tracking_confidence=0.5) a
                     if thumb_index_distance < 50:
                         pyramid_held = True
                         moving_ball.body.position = index_pixel  # Mover la pirámide a la posición del índice
-                        cv2.circle(image, thumb_pixel, 10, (0, 255, 0), -1)  # Dibujar círculo verde en el pulgar
-                        cv2.circle(image, index_pixel, 10, (0, 255, 0), -1)  # Dibujar círculo verde en el índice
-                    else:
-                        cv2.circle(image, thumb_pixel, 10, (255, 0, 0), -1)  # Círculo rojo en el pulgar si no está cerca
-                        cv2.circle(image, index_pixel, 10, (255, 0, 0), -1)  # Círculo rojo en el índice si no está cerca
-
-                    # Si el dedo medio está cerca del índice, soltar la pirámide
-                    if thumb_index_distance > 30:
+                    elif prueba:
                         if not pyramid_released:
                             pyramid_released = True
-                            release_time = time.time()  # Registrar el tiempo de liberación
-                            waiting_for_result = True  # Esperar resultado de colisión
-                        cv2.circle(image, middle_pixel, 10, (0, 0, 255), -1)  # Círculo azul en el dedo medio
-                    else:
-                        cv2.circle(image, middle_pixel, 10, (255, 0, 0), -1)  # Círculo rojo en el dedo medio
-
-
-
-        # Dibujar la pantalla de fondo y la pirámide
-        screen.blit(background_image, (0, 0))
-
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                run = False  # Salir si se cierra la ventana
-
-        space.debug_draw(draw_options)  # Dibujar objetos fisicos
-
-        if frameCount > 15:
-            frameCount = 0  # Reinicia el conteo de fotogramas cada 15 ciclos para optimizar rendimiento.
-
-        # Dibujar la pirámide en su posición actual
-        pyramid_pos = (int(moving_ball.body.position[0] - objectRadius),
-                       int(moving_ball.body.position[1] - objectRadius))
-        # Calcula la posición donde se debe dibujar la pirámide restando su radio a la posición de la bola (centrado).
-        screen.blit(ballFrame, pyramid_pos)  # Dibuja la pirámide en pantalla.
-
-        # Obtener la pirámide actual y su texto asociado
-        current_pyramid = get_current_pyramid()  # Función que determina qué pirámide se está moviendo.
-        pyramid_text = pyramid_texts[current_pyramid]  # Obtiene el texto correspondiente a la pirámide actual.
-
-        # Reproducir audio si la pirámide está en la posición correcta
-        if current_audio != current_pyramid:
-            pygame.mixer.music.stop()  # Detiene cualquier audio previo.
-            pygame.mixer.music.load(audios_piramides[current_pyramid])  # Carga el nuevo audio asociado a la pirámide.
-            pygame.mixer.music.play(-1)  # Reproduce el nuevo audio en bucle.
-            current_audio = current_pyramid  # Actualiza la pirámide actual que está sonando.
-
-        # Dibujar el área correcta de la pirámide
-        for pyramid_name, pyramid_rect in areas.items():  # Recorre todas las áreas de pirámides.
-            if pyramid_rect.collidepoint(
-                    moving_ball.body.position):  # Verifica si la pirámide actual está en su área correcta.
-                pyramid_text = pyramid_texts[pyramid_name]  # Actualiza el texto si la pirámide está en su lugar.
-
-        text_x = moving_ball.body.position[
-                     0] - pyramid_text.get_width() // 2  # Calcula la posición del texto centrado sobre la pirámide.
-        text_y = moving_ball.body.position[1] + objectRadius + 5  # Dibuja el texto justo debajo de la pirámide.
-
-        # Lógica para manejar la colisión solo cuando se suelta la pirámide
-        # Lógica para manejar la colisión después de esperar 5 segundos
-        if waiting_for_result and time.time() - release_time >= 3:  # Verifica si han pasado 3 segundos desde que la pirámide fue soltada.
+                            # Registrar el tiempo de liberación
+                            release_time = time.time()
+                            # Esperar resultado de colisión
+                            waiting_for_result = True
+        if waiting_for_result and time.time() - release_time >= 2:  # Verifica si han pasado 3 segundos desde que la pirámide fue soltada.
+            print("hola")
             waiting_for_result = False
             ball_rect = pygame.Rect(moving_ball.body.position[0], moving_ball.body.position[1], 1,
                                     1)  # Crea un rectángulo pequeño en la posición de la pirámide.
@@ -441,11 +408,23 @@ with mp_hands.Hands(min_detection_confidence=0.8, min_tracking_confidence=0.5) a
                 if not collision_detected:
                     print("No se detectó colisión con ninguna área.")  # No hubo colisión con ninguna área.
                     sonido_centrar.play()
-
-        # Reiniciar el estado si la pirámide se mueve durante la espera
+                # Reiniciar el estado si la pirámide se mueve durante la espera
         if waiting_for_result and pyramid_held:  # Si la pirámide es movida mientras se espera resultado.
             waiting_for_result = False  # Cancela la espera por resultado.
             pyramid_released = False  # Reinicia el estado de liberación de la pirámide.
+
+        # Dibujar el área correcta de la pirámide
+        for pyramid_name, pyramid_rect in areas.items():  # Recorre todas las áreas de pirámides.
+            if pyramid_rect.collidepoint(moving_ball.body.position):  # Verifica si la pirámide actual está en su área correcta.
+                pyramid_text = pyramid_texts[pyramid_name]  # Actualiza el texto si la pirámide está en su lugar.
+
+
+
+        # Lógica para manejar la colisión solo cuando se suelta la pirámide
+        # Lógica para manejar la colisión después de esperar 5 segundos
+
+
+
         # Crear superficies transparentes para las áreas una vez
         area_surfaces = {}
         for name, area in areas.items():
@@ -486,10 +465,17 @@ with mp_hands.Hands(min_detection_confidence=0.8, min_tracking_confidence=0.5) a
             pygame.mixer.music.pause()
             game_over = True
 
+        if frameCount > 15:
+            frameCount = 0  # Reinicia el conteo de fotogramas cada 15 ciclos para optimizar rendimiento.
+
         if frametick > 0:
             frametick = 0
             frameCount += 1
         frametick += 1
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                runGame = False  # Salir si se cierra la ventana
 
         # Mostrar la ventana de video si no está en pantalla completa
         if not makefullscreen:
@@ -502,7 +488,7 @@ with mp_hands.Hands(min_detection_confidence=0.8, min_tracking_confidence=0.5) a
 
     if game_over:
         # screen.fill(BG)
-        screen.blit(background_image, (0, 0))
+        #screen.blit(background_image, (0, 0))
         # CAMBIO 3
         if piramides_correctas == 4:
             # Enviar dato a Arduino
@@ -581,7 +567,7 @@ while waiting_for_enter:
 
 cap.release()
 cv2.destroyAllWindows()
+pygame.quit()
 # Cerrar la conexión serial al finalizar
 if arduino is not None:
     arduino.close()
-pygame.quit()
