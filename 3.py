@@ -33,39 +33,11 @@ playGIF = False
 SCREEN_WIDTH = 1300  # Ancho de la pantalla
 SCREEN_HEIGHT = 850  # Alto de la pantalla
 
-# Diccionario que contiene rutas a los archivos de audio de las pirámides
-
-# Función para mezclar el orden de las pirámides aleatoriamente
-def mezclar_piramides(areas2):
-    # Obtener una lista de las claves (nombres de pirámides) de las áreas
-    claves = list(areas2.keys())
-    # Mezclar la lista de claves aleatoriamente
-    random.shuffle(claves)
-    # Crear un nuevo diccionario con el nuevo orden de pirámides
-    nuevo_orden = {clave: areas2[clave] for clave in claves}
-    return nuevo_orden
-
-# Nuevas variables globales para el estado del juego
-# Indica si la pirámide ha sido soltada
-pyramid_released = False
-release_time = None  # Guarda el tiempo cuando la pirámide fue soltada
-waiting_for_result = False  # Indica si se está esperando un resultado tras soltar la pirámide
-
-piramides_correctas = 0  # Contador de pirámides correctas
-total_piramides = len(areas)  # Total de pirámides en el juego
-current_audio = None  # Audio actual que está sonando para una pirámide
-
-# Inicializar sonidos usando pygame.mixer para efectos de sonido
-pygame.mixer.init()
-sonido_correcto = pygame.mixer.Sound("sonido/correcto.mp3")  # Sonido para acierto
-sonido_incorrecto = pygame.mixer.Sound("sonido/incorrecto.mp3")  # Sonido para error
-sonido_centrar = pygame.mixer.Sound("sonido/centrar.mp3")  # Sonido para error
-
-
-# Función para renderizar el texto con el tamaño de fuente y color especificado
 def render_text(text, font_size, color):
     font = pygame.font.Font(None, font_size)  # Se crea una fuente de Pygame
     return font.render(text, True, color)  # Renderiza el texto con antialiasing
+
+# Diccionario que contiene rutas a los archivos de audio de las pirámides
 audios_piramides = {
     "Chichén Itzá": r"Audios_Piramides/Chichén_Itzá.mp3",
     "Palenque": r"Audios_Piramides/Palenque_Chiapas.mp3",
@@ -129,6 +101,15 @@ imagenes_piramide = {
     "Xochicalco": "imagenes/xochicalco.jpg"
 }
 
+def mezclar_piramides(areas2):
+    # Obtener una lista de las claves (nombres de pirámides) de las áreas
+    claves = list(areas2.keys())
+    # Mezclar la lista de claves aleatoriamente
+    random.shuffle(claves)
+    # Crear un nuevo diccionario con el nuevo orden de pirámides
+    nuevo_orden = {clave: areas2[clave] for clave in claves}
+    return nuevo_orden
+
 areas = mezclar_piramides(areas2)
 pygame.mixer.music.load(audios_piramides[list(areas.keys())[0]])
 print(audios_piramides[list(areas.keys())[0]])
@@ -138,6 +119,28 @@ pygame.mixer.music.play(0)  # Solo se reproduce una vez
 # Lista de nombres de pirámides para mantener el orden de juego
 pyramid_names = list(areas.keys())
 current_pyramid_index = 0  # Índice de la pirámide actual
+
+# Función para mezclar el orden de las pirámides aleatoriamente
+
+
+# Nuevas variables globales para el estado del juego
+# Indica si la pirámide ha sido soltada
+pyramid_released = False
+release_time = None  # Guarda el tiempo cuando la pirámide fue soltada
+waiting_for_result = False  # Indica si se está esperando un resultado tras soltar la pirámide
+
+piramides_correctas = 0  # Contador de pirámides correctas
+total_piramides = len(areas)  # Total de pirámides en el juego
+current_audio = None  # Audio actual que está sonando para una pirámide
+
+# Inicializar sonidos usando pygame.mixer para efectos de sonido
+pygame.mixer.init()
+sonido_correcto = pygame.mixer.Sound("sonido/correcto.mp3")  # Sonido para acierto
+sonido_incorrecto = pygame.mixer.Sound("sonido/incorrecto.mp3")  # Sonido para error
+sonido_centrar = pygame.mixer.Sound("sonido/centrar.mp3")  # Sonido para error
+
+
+# Función para renderizar el texto con el tamaño de fuente y color especificado
 
 
 # Función para obtener la pirámide actual basándose en el índice
@@ -328,8 +331,6 @@ game_over = False
 # Iniciar el módulo de detección de manos de MediaPipe con confianza mínima de detección y seguimiento
 with mp_hands.Hands(min_detection_confidence=0.8, min_tracking_confidence=0.8) as hands:
     while cap.isOpened() and runGame and not game_over:
-
-
         prueba = True
         clock.tick(FPS)  # Control de velocidad de fotogramas
         space.step(10 / FPS)  # Actualizar el espacio de física de Pymunk
@@ -575,6 +576,4 @@ while waiting_for_enter:
 cap.release()
 cv2.destroyAllWindows()
 pygame.quit()
-# Cerrar la conexión serial al finalizar
-if arduino is not None:
-    arduino.close()
+arduino.close()
