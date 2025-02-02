@@ -34,6 +34,38 @@ SCREEN_WIDTH = 1300  # Ancho de la pantalla
 SCREEN_HEIGHT = 850  # Alto de la pantalla
 
 # Diccionario que contiene rutas a los archivos de audio de las pirámides
+
+# Función para mezclar el orden de las pirámides aleatoriamente
+def mezclar_piramides(areas2):
+    # Obtener una lista de las claves (nombres de pirámides) de las áreas
+    claves = list(areas2.keys())
+    # Mezclar la lista de claves aleatoriamente
+    random.shuffle(claves)
+    # Crear un nuevo diccionario con el nuevo orden de pirámides
+    nuevo_orden = {clave: areas2[clave] for clave in claves}
+    return nuevo_orden
+
+# Nuevas variables globales para el estado del juego
+# Indica si la pirámide ha sido soltada
+pyramid_released = False
+release_time = None  # Guarda el tiempo cuando la pirámide fue soltada
+waiting_for_result = False  # Indica si se está esperando un resultado tras soltar la pirámide
+
+piramides_correctas = 0  # Contador de pirámides correctas
+total_piramides = len(areas)  # Total de pirámides en el juego
+current_audio = None  # Audio actual que está sonando para una pirámide
+
+# Inicializar sonidos usando pygame.mixer para efectos de sonido
+pygame.mixer.init()
+sonido_correcto = pygame.mixer.Sound("sonido/correcto.mp3")  # Sonido para acierto
+sonido_incorrecto = pygame.mixer.Sound("sonido/incorrecto.mp3")  # Sonido para error
+sonido_centrar = pygame.mixer.Sound("sonido/centrar.mp3")  # Sonido para error
+
+
+# Función para renderizar el texto con el tamaño de fuente y color especificado
+def render_text(text, font_size, color):
+    font = pygame.font.Font(None, font_size)  # Se crea una fuente de Pygame
+    return font.render(text, True, color)  # Renderiza el texto con antialiasing
 audios_piramides = {
     "Chichén Itzá": r"Audios_Piramides/Chichén_Itzá.mp3",
     "Palenque": r"Audios_Piramides/Palenque_Chiapas.mp3",
@@ -66,48 +98,6 @@ areas2 = {
     "Xochicalco": pygame.Rect(255, 470, 60, 60)
 }
 
-
-# Función para mezclar el orden de las pirámides aleatoriamente
-def mezclar_piramides(areas2):
-    # Obtener una lista de las claves (nombres de pirámides) de las áreas
-    claves = list(areas2.keys())
-    # Mezclar la lista de claves aleatoriamente
-    random.shuffle(claves)
-    # Crear un nuevo diccionario con el nuevo orden de pirámides
-    nuevo_orden = {clave: areas2[clave] for clave in claves}
-    return nuevo_orden
-
-
-# Llamada a la función
-areas = mezclar_piramides(areas2)
-pygame.mixer.music.load(audios_piramides[list(areas.keys())[0]])
-print(audios_piramides[list(areas.keys())[0]])
-pygame.mixer.music.play(0)  # Solo se reproduce una vez
-
-
-# Nuevas variables globales para el estado del juego
-# Indica si la pirámide ha sido soltada
-pyramid_released = False
-release_time = None  # Guarda el tiempo cuando la pirámide fue soltada
-waiting_for_result = False  # Indica si se está esperando un resultado tras soltar la pirámide
-
-piramides_correctas = 0  # Contador de pirámides correctas
-total_piramides = len(areas)  # Total de pirámides en el juego
-current_audio = None  # Audio actual que está sonando para una pirámide
-
-# Inicializar sonidos usando pygame.mixer para efectos de sonido
-pygame.mixer.init()
-sonido_correcto = pygame.mixer.Sound("sonido/correcto.mp3")  # Sonido para acierto
-sonido_incorrecto = pygame.mixer.Sound("sonido/incorrecto.mp3")  # Sonido para error
-sonido_centrar = pygame.mixer.Sound("sonido/centrar.mp3")  # Sonido para error
-
-
-# Función para renderizar el texto con el tamaño de fuente y color especificado
-def render_text(text, font_size, color):
-    font = pygame.font.Font(None, font_size)  # Se crea una fuente de Pygame
-    return font.render(text, True, color)  # Renderiza el texto con antialiasing
-
-
 # Diccionario que almacena los textos renderizados para cada pirámide
 pyramid_texts = {
     "Calakmul": render_text("Calakmul", 60, (0, 0, 0)),
@@ -124,6 +114,27 @@ pyramid_texts = {
     "Xochicalco": render_text("Xochicalco", 60, (0, 0, 0)),
 }
 
+imagenes_piramide = {
+    "Chichén Itzá": "imagenes/chichenitza.jpg",
+    "Palenque": "imagenes/palenque.jpg",
+    "Calakmul": "imagenes/calakmul.jpg",
+    "Cholula": "imagenes/cholula.jpg",
+    "Comalcalco": "imagenes/comalcalco.jpg",
+    "Mitla": "imagenes/mitla.jpg",
+    "Monte Albán": "imagenes/montealban.jpg",
+    "El Tajín": "imagenes/eltajin.jpg",
+    "Tamtoc": "imagenes/tamtoc.jpg",
+    "Teotihuacan": "imagenes/teotihuacan.jpg",
+    "Tulum": "imagenes/tulum.jpg",
+    "Xochicalco": "imagenes/xochicalco.jpg"
+}
+
+areas = mezclar_piramides(areas2)
+pygame.mixer.music.load(audios_piramides[list(areas.keys())[0]])
+print(audios_piramides[list(areas.keys())[0]])
+pygame.mixer.music.play(0)  # Solo se reproduce una vez
+
+
 # Lista de nombres de pirámides para mantener el orden de juego
 pyramid_names = list(areas.keys())
 current_pyramid_index = 0  # Índice de la pirámide actual
@@ -135,32 +146,45 @@ def get_current_pyramid():
 
 # Función para reiniciar el juego después de una colisión correcta
 def reset_game():
-    global start_time, current_audio
-    moving_ball.body.position = (700, 100)  # Restablece la posición de la pelota en movimiento
-    moving_ball.body.velocity = (0, 0)  # Restablece la velocidad de la pelota
-    start_time = time.time()  # Actualiza el tiempo de inicio
+    global start_time, current_audio, ballFrame
 
-    current_pyramid = get_current_pyramid()  # Obtiene la pirámide actual
-    if current_pyramid in audios_piramides:  # Si hay audio asociado a la pirámide
-        pygame.mixer.stop()  # Detiene cualquier sonido actual
-        pygame.mixer.music.load(audios_piramides[current_pyramid])  # Carga el audio de la pirámide actual
-        pygame.mixer.music.play(-1)  # Reproduce el audio en bucle
-        current_audio = current_pyramid  # Actualiza el audio actual
-        sonido_correcto.play()  # Reproduce sonido de acierto
+    moving_ball.body.position = (700, 100)  # Restablece la posición de la pirámide
+    moving_ball.body.velocity = (0, 0)  # Detiene el movimiento
+    start_time = time.time()  # Reinicia el temporizador
+
+    # Obtener la pirámide actual y cargar su imagen
+    current_pyramid = get_current_pyramid()
+    ballFrame = pygame.image.load(imagenes_piramide[current_pyramid]).convert_alpha()
+    ballFrame = pygame.transform.scale(ballFrame, (objectRadius * 2, objectRadius * 2))
+
+    # Cargar y reproducir el audio de la pirámide
+    if current_pyramid in audios_piramides:
+        pygame.mixer.music.stop()
+        pygame.mixer.music.load(audios_piramides[current_pyramid])
         pygame.mixer.music.play(-1)
+
 
 
 # Función principal para manejar la colisión correcta
 def handle_correct_collision():
-    global game_over, piramides_correctas, current_pyramid_index
+    global game_over, piramides_correctas, current_pyramid_index, ballFrame
+
     sonido_correcto.play()  # Reproduce el sonido de acierto
     piramides_correctas += 1  # Incrementa el contador de pirámides correctas
 
     if piramides_correctas == total_piramides:  # Si todas las pirámides han sido completadas
         game_over = True  # Termina el juego
     else:
-        current_pyramid_index = (current_pyramid_index + 1) % len(pyramid_names)  # Avanza a la siguiente pirámide
+        # Avanzar a la siguiente pirámide
+        current_pyramid_index = (current_pyramid_index + 1) % len(pyramid_names)
+
+        # Cargar la nueva imagen de la pirámide
+        nueva_piramide = pyramid_names[current_pyramid_index]
+        ballFrame = pygame.image.load(imagenes_piramide[nueva_piramide]).convert_alpha()
+        ballFrame = pygame.transform.scale(ballFrame, (objectRadius * 2, objectRadius * 2))
+
         reset_game()  # Reinicia el juego para la nueva pirámide
+
 
 # Configurar la ventana de Pygame con el tamaño definido
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -290,15 +314,7 @@ else:
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1300)  # Establecer ancho de video
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 850)  # Establecer altura de video
 
-# Inicializar variables para el control de gestos
-counter = 0
-moveDelta = 30
-moveX = 0
-moveY = 0
-moveZ = 0
-newZ = True
-refZ = 0
-absZ = 0
+area_surfaces = {}
 
 # Función para calcular la distancia entre dos puntos
 def calc_distance(p1, p2):
@@ -384,15 +400,13 @@ with mp_hands.Hands(min_detection_confidence=0.8, min_tracking_confidence=0.8) a
                             release_time = time.time()
                             # Esperar resultado de colisión
                             waiting_for_result = True
+
         if waiting_for_result and time.time() - release_time >= 2:  # Verifica si han pasado 3 segundos desde que la pirámide fue soltada.
-            print("hola")
             waiting_for_result = False
-            ball_rect = pygame.Rect(moving_ball.body.position[0], moving_ball.body.position[1], 1,
-                                    1)  # Crea un rectángulo pequeño en la posición de la pirámide.
+            ball_rect = pygame.Rect(moving_ball.body.position[0], moving_ball.body.position[1], 1, 1)  # Crea un rectángulo pequeño en la posición de la pirámide.
             correct_area = areas[current_pyramid]  # Obtiene el área correcta para la pirámide actual.
 
-            if correct_area.colliderect(
-                    ball_rect):  # Verifica si el rectángulo de la pirámide está colisionando con el área correcta.
+            if correct_area.colliderect(ball_rect):  # Verifica si el rectángulo de la pirámide está colisionando con el área correcta.
                 print(f"¡Colisión correcta con {current_pyramid}!")
                 sonido_correcto.play()  # Reproduce el sonido de colisión correcta.
                 handle_correct_collision()  # Maneja la colisión correcta, probablemente sumando puntos.
@@ -418,15 +432,8 @@ with mp_hands.Hands(min_detection_confidence=0.8, min_tracking_confidence=0.8) a
             if pyramid_rect.collidepoint(moving_ball.body.position):  # Verifica si la pirámide actual está en su área correcta.
                 pyramid_text = pyramid_texts[pyramid_name]  # Actualiza el texto si la pirámide está en su lugar.
 
-
-
-        # Lógica para manejar la colisión solo cuando se suelta la pirámide
-        # Lógica para manejar la colisión después de esperar 5 segundos
-
-
-
         # Crear superficies transparentes para las áreas una vez
-        area_surfaces = {}
+
         for name, area in areas.items():
             surface = pygame.Surface((area.width, area.height), pygame.SRCALPHA)
             surface.fill((0, 0, 0, 0))  # Completamente transparente
